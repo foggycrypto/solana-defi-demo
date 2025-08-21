@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ada 的 Solana DeFi 應用程式 (鏈上互動質押與提領)</title>
+    <!-- 引入 Tailwind CSS 用於美觀和響應式設計 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* 設定全域字體為 Inter */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f0f2f5; /* 輕微的背景色 */
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-center min-h-screen p-4">
+    <!-- 主容器，置中並帶有陰影和圓角 -->
+    <div class="bg-white rounded-xl shadow-lg p-6 md:p-8 w-full max-w-md">
+        <!-- 應用程式標題 -->
+        <h1 class="text-3xl font-bold text-center text-gray-800 mb-6">我的 Solana DeFi 應用程式</h1>
+
+        <!-- 連接錢包區塊 -->
+        <div class="mb-6 text-center">
+            <button id="connectWalletButton" class="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition duration-150 ease-in-out shadow-md">
+                連接 Phantom 錢包
+            </button>
+            <p id="walletStatus" class="mt-3 text-sm text-gray-600"></p>
+            <p id="walletAddress" class="mt-1 text-sm text-gray-800 font-mono break-all"></p>
+        </div>
+
+        <!-- 錢包餘額顯示區塊 -->
+        <div class="bg-indigo-50 p-4 rounded-lg mb-4 shadow-sm">
+            <h2 class="text-xl font-semibold text-indigo-700 mb-2">錢包餘額 (來自 Solana Devnet)</h2>
+            <!-- 顯示實際的 SOL 可用餘額 -->
+            <p class="text-4xl font-extrabold text-indigo-900" id="solBalance">0.0000 SOL</p>
+        </div>
+
+        <!-- 質押餘額顯示區塊 -->
+        <div class="bg-emerald-50 p-4 rounded-lg mb-6 shadow-sm">
+            <h2 class="text-xl font-semibold text-emerald-700 mb-2">已質押 SOL (本機模擬)</h2>
+            <!-- 顯示模擬的已質押 SOL 餘額 -->
+            <p class="text-4xl font-extrabold text-emerald-900" id="stakedSolBalance">0.0000 SOL</p>
+        </div>
+
+        <!-- 轉帳操作區塊 -->
+        <div class="border-t border-gray-200 pt-6 mt-6">
+            <h2 class="text-2xl font-semibold text-gray-800 mb-4">發送 SOL (在 Solana Devnet)</h2>
+            <div class="space-y-4">
+                <!-- 收款人地址輸入框 -->
+                <div>
+                    <label for="recipientAddress" class="block text-sm font-medium text-gray-700 mb-1">收款人地址</label>
+                    <input type="text" id="recipientAddress" placeholder="輸入收款人 Solana 地址"
+                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition duration-150 ease-in-out">
+                </div>
+                <!-- 金額輸入框 -->
+                <div>
+                    <label for="amount" class="block text-sm font-medium text-gray-700 mb-1">金額 (SOL)</label>
+                    <input type="number" id="amount" placeholder="輸入金額" step="0.000000001" min="0.000000001"
+                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500 transition duration-150 ease-in-out">
+                </div>
+                <!-- 發送按鈕 -->
+                <button id="sendButton" class="w-full bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition duration-150 ease-in-out shadow-md" disabled>
+                    發送 SOL
+                </button>
+            </div>
+        </div>
+
+        <!-- 質押操作區塊 -->
+        <div class="border-t border-gray-200 pt-6 mt-6">
+            <h2 class="text-2xl font-semibold text-gray-800 mb-4">質押 SOL (互動式模擬)</h2>
+            <div class="space-y-4">
+                <!-- 質押金額輸入框 -->
+                <div>
+                    <label for="stakeAmount" class="block text-sm font-medium text-gray-700 mb-1">質押金額 (SOL)</label>
+                    <input type="number" id="stakeAmount" placeholder="輸入質押金額" step="0.000000001" min="0.000000001"
+                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-emerald-500 focus:border-emerald-500 transition duration-150 ease-in-out">
+                </div>
+                <!-- 質押按鈕 -->
+                <button id="stakeButton" class="w-full bg-emerald-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 transition duration-150 ease-in-out shadow-md" disabled>
+                    質押 SOL
+                </button>
+            </div>
+        </div>
+
+        <!-- 提領操作區塊 -->
+        <div class="border-t border-gray-200 pt-6 mt-6">
+            <h2 class="text-2xl font-semibold text-gray-800 mb-4">提領已質押 SOL (互動式模擬)</h2>
+            <div class="space-y-4">
+                <!-- 提領金額輸入框 -->
+                <div>
+                    <label for="unstakeAmount" class="block text-sm font-medium text-gray-700 mb-1">提領金額 (SOL)</label>
+                    <input type="number" id="unstakeAmount" placeholder="輸入提領金額" step="0.000000001" min="0.000000001"
+                           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-red-500 focus:border-red-500 transition duration-150 ease-in-out">
+                </div>
+                <!-- 提領按鈕 -->
+                <button id="unstakeButton" class="w-full bg-red-600 text-white font-bold py-3 px-4 rounded-lg hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 transition duration-150 ease-in-out shadow-md" disabled>
+                    提領已質押 SOL
+                </button>
+            </div>
+            <!-- 訊息顯示區塊（成功/失敗/提示） -->
+            <p id="message" class="mt-4 text-center text-sm font-medium"></p>
+        </div>
+
+        <!-- 應用程式免責聲明 -->
+        <p class="text-xs text-gray-400 text-center mt-6">
+            此應用程式連接到 Solana Devnet。請確保您的 Phantom 錢包已安裝並設置為 Devnet。<br>
+            **質押與提領功能將觸發真實的 Phantom 交易，但其餘額管理仍為本機模擬，並未與實際的智能合約連結。**
+        </p>
+    </div>
+
+    <!-- 引入 Solana Web3.js 函式庫 -->
+    <script src="https://unpkg.com/@solana/web3.js@latest/lib/index.iife.min.js"></script>
+
+    <script>
+        // 確保 Solana Web3.js 函式庫已載入
+        const { Connection, PublicKey, Transaction, SystemProgram } = solanaWeb3;
+
+        // 設定 Solana 網路 (Devnet 是開發測試網路)
+        const network = solanaWeb3.clusterApiUrl('devnet');
+        const connection = new Connection(network, 'confirmed');
+
+        // 獲取 DOM 元素
+        const connectWalletButton = document.getElementById('connectWalletButton');
+        const walletStatusElement = document.getElementById('walletStatus');
+        const walletAddressElement = document.getElementById('walletAddress');
+        const solBalanceElement = document.getElementById('solBalance');
+        const stakedSolBalanceElement = document.getElementById('stakedSolBalance'); // 已質押餘額顯示元素
+        const recipientAddressInput = document.getElementById('recipientAddress');
+        const amountInput = document.getElementById('amount');
+        const sendButton = document.getElementById('sendButton');
+        const stakeAmountInput = document.getElementById('stakeAmount'); // 質押金額輸入
+        const stakeButton = document.getElementById('stakeButton'); // 質押按鈕
+        const unstakeAmountInput = document.getElementById('unstakeAmount'); // 提領金額輸入
+        const unstakeButton = document.getElementById('unstakeButton'); // 提領按鈕
+        const messageElement = document.getElementById('message');
+
+        let provider = null; // Phantom 錢包提供者
+        let walletPublicKey = null; // 連接的錢包公開金鑰
+        let currentAvailableSolBalance = 0; // 錢包中可用的 SOL 餘額 (來自 Devnet)
+        let currentStakedSolBalance = 0; // 模擬的已質押 SOL 餘額 (此為前端本機狀態，未與智能合約連結)
+
+        // 函數：顯示訊息
+        function showMessage(msg, colorClass) {
+            messageElement.textContent = msg;
+            messageElement.className = `mt-4 text-center text-sm font-medium ${colorClass}`;
+        }
+
+        // 函數：更新可用餘額顯示 (從 Devnet 獲取)
+        async function updateAvailableBalanceDisplay() {
+            if (!walletPublicKey) {
+                solBalanceElement.textContent = '0.0000 SOL';
+                currentAvailableSolBalance = 0;
+                return;
+            }
+            try {
+                const balanceLamports = await connection.getBalance(walletPublicKey);
+                currentAvailableSolBalance = balanceLamports / solanaWeb3.LAMPORTS_PER_SOL;
+                solBalanceElement.textContent = currentAvailableSolBalance.toFixed(4) + ' SOL'; // 顯示到小數點後四位
+            } catch (error) {
+                console.error('獲取可用餘額失敗:', error);
+                showMessage('獲取可用餘額失敗。', 'text-red-600');
+                solBalanceElement.textContent = '錯誤';
+                currentAvailableSolBalance = 0;
+            }
+        }
+
+        // 函數：更新已質押餘額顯示 (模擬)
+        function updateStakedBalanceDisplay() {
+            stakedSolBalanceElement.textContent = currentStakedSolBalance.toFixed(4) + ' SOL';
+        }
+
+        // 函數：檢查 Phantom 錢包是否可用
+        function getProvider() {
+            if ('solana' in window) {
+                const solanaWindow = window.solana;
+                if (solanaWindow.isPhantom) {
+                    return solanaWindow;
+                }
+            }
+            // 如果沒有 Phantom，提示用戶安裝
+            window.open('https://phantom.app/', '_blank');
+            return null;
+        }
+
+        // 函數：啟用或禁用操作按鈕
+        function toggleActionButtons(enable) {
+            sendButton.disabled = !enable;
+            stakeButton.disabled = !enable;
+            unstakeButton.disabled = !enable;
+        }
+
+        // 點擊「連接 Phantom 錢包」按鈕
+        connectWalletButton.addEventListener('click', async () => {
+            provider = getProvider();
+            if (!provider) {
+                showMessage('請安裝 Phantom 錢包。', 'text-red-600');
+                return;
+            }
+
+            try {
+                const resp = await provider.connect();
+                walletPublicKey = resp.publicKey;
+
+                walletStatusElement.textContent = '錢包已連接！';
+                walletStatusElement.className = 'mt-3 text-sm text-green-600';
+                walletAddressElement.textContent = walletPublicKey.toString();
+                connectWalletButton.disabled = true;
+                toggleActionButtons(true); // 連接成功後啟用所有操作按鈕
+
+                // 手動監聽 Phantom 的斷開連接事件
+                provider.on('disconnect', () => {
+                    walletPublicKey = null;
+                    walletAddressElement.textContent = '';
+                    walletStatusElement.textContent = '錢包已斷開連接。';
+                    walletStatusElement.className = 'mt-3 text-sm text-red-600';
+                    toggleActionButtons(false); // 斷開連接後禁用所有操作按鈕
+                    updateAvailableBalanceDisplay(); // 清空可用餘額顯示
+                    currentStakedSolBalance = 0; // 重置模擬質押餘額
+                    updateStakedBalanceDisplay(); // 清空質押餘額顯示
+                });
+
+                await updateAvailableBalanceDisplay(); // 連接成功後立即更新可用餘額
+
+            } catch (err) {
+                console.error('連接錢包失敗:', err);
+                if (err.code === 4001) {
+                    showMessage('用戶拒絕連接錢包。', 'text-red-600');
+                } else {
+                    showMessage('連接錢包時發生錯誤。', 'text-red-600');
+                }
+            }
+        });
+
+        // 點擊「發送 SOL」按鈕 (真實鏈上交易)
+        sendButton.addEventListener('click', async () => {
+            if (!walletPublicKey) {
+                showMessage('請先連接錢包。', 'text-red-600');
+                return;
+            }
+
+            const recipientAddressStr = recipientAddressInput.value.trim();
+            const amountSOL = parseFloat(amountInput.value);
+
+            if (!recipientAddressStr) {
+                showMessage('請輸入收款人地址。', 'text-red-600');
+                return;
+            }
+            if (isNaN(amountSOL) || amountSOL <= 0) {
+                showMessage('請輸入有效的金額。', 'text-red-600');
+                return;
+            }
+
+            try {
+                const recipientPublicKey = new PublicKey(recipientAddressStr);
+                const amountLamports = amountSOL * solanaWeb3.LAMPORTS_PER_SOL;
+
+                // 檢查餘額是否足夠 (會考慮交易費，但這裡為簡化僅檢查轉帳金額本身)
+                if (currentAvailableSolBalance * solanaWeb3.LAMPORTS_PER_SOL < amountLamports) {
+                    showMessage('錢包可用餘額不足以支付轉帳金額。', 'text-red-600');
+                    return;
+                }
+
+                const transaction = new Transaction().add(
+                    SystemProgram.transfer({
+                        fromPubkey: walletPublicKey,
+                        toPubkey: recipientPublicKey,
+                        lamports: amountLamports,
+                    })
+                );
+
+                transaction.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+                transaction.feePayer = walletPublicKey;
+
+                toggleActionButtons(false); // 禁用按鈕防止重複點擊
+                sendButton.textContent = '交易發送中...';
+                showMessage('正在等待 Phantom 批准交易...', 'text-gray-600');
+
+                const signedTransaction = await provider.signTransaction(transaction);
+                const signature = await connection.sendRawTransaction(signedTransaction.serialize());
+
+                showMessage(`交易已發送！簽名: ${signature}. 等待確認...`, 'text-blue-600');
+
+                await connection.confirmTransaction(signature);
+
+                showMessage(`交易成功！簽名: ${signature}.`, 'text-green-600');
+                amountInput.value = '';
+                await updateAvailableBalanceDisplay(); // 更新可用餘額顯示
+
+            } catch (error) {
+                console.error('發送交易失敗:', error);
+                if (error.code === 4001) {
+                    showMessage('用戶拒絕交易。', 'text-red-600');
+                } else if (error.message.includes('insufficient funds')) {
+                    showMessage('可用資金不足以完成交易 (包含交易費)。', 'text-red-600');
+                } else {
+                    showMessage(`發送交易時發生錯誤: ${error.message}`, 'text-red-600');
+                }
+            } finally {
+                toggleActionButtons(true); // 重新啟用按鈕
+                sendButton.textContent = '發送 SOL';
+            }
+        });
+
+        // 點擊「質押 SOL」按鈕 (觸發真實 Phantom 交易，但質押邏輯仍為本機模擬)
+        stakeButton.addEventListener('click', async () => {
+            if (!walletPublicKey) {
+                showMessage('請先連接錢包。', 'text-red-600');
+                return;
+            }
+
+            const stakeAmount = parseFloat(stakeAmountInput.value);
+
+            if (isNaN(stakeAmount) || stakeAmount <= 0) {
+                showMessage('請輸入有效的質押金額。', 'text-red-600');
+                return;
+            }
+            if (stakeAmount > currentAvailableSolBalance) {
+                showMessage('可用餘額不足以質押。', 'text-red-600');
+                return;
+            }
+
+            // 為了模擬鏈上互動，這裡發送一個極小金額（1 Lamport）的轉帳給自己。
+            // 在真實的質押場景中，這裡會是呼叫一個質押智能合約的指令。
+            const dummyTransactionAmount = 1; // 1 Lamport = 0.000000001 SOL
+            try {
+                const transaction = new Transaction().add(
+                    SystemProgram.transfer({
+                        fromPubkey: walletPublicKey,
+                        toPubkey: walletPublicKey, // 轉帳給自己，僅用於觸發鏈上簽名
+                        lamports: dummyTransactionAmount,
+                    })
+                );
+
+                transaction.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+                transaction.feePayer = walletPublicKey;
+
+                toggleActionButtons(false); // 禁用按鈕
+                stakeButton.textContent = '質押中 (等待批准)...';
+                showMessage('正在等待 Phantom 批准質押交易...', 'text-gray-600');
+
+                const signedTransaction = await provider.signTransaction(transaction);
+                const signature = await connection.sendRawTransaction(signedTransaction.serialize());
+
+                showMessage(`質押交易已發送！簽名: ${signature}. 等待確認...`, 'text-blue-600');
+
+                await connection.confirmTransaction(signature);
+
+                // 如果交易成功，則更新本機模擬的質押餘額
+                currentAvailableSolBalance -= stakeAmount; // 從可用餘額中扣除 (這是模擬，實際 SOL 未離開錢包)
+                currentStakedSolBalance += stakeAmount; // 增加到已質押餘額
+
+                updateAvailableBalanceDisplay(); // 更新可用餘額顯示
+                updateStakedBalanceDisplay(); // 更新已質押餘額顯示
+
+                showMessage(`成功質押 ${stakeAmount.toFixed(4)} SOL！(鏈上交易已確認)`, 'text-green-600');
+                stakeAmountInput.value = '';
+
+            } catch (error) {
+                console.error('質押交易失敗:', error);
+                if (error.code === 4001) {
+                    showMessage('用戶拒絕質押交易。', 'text-red-600');
+                } else if (error.message.includes('insufficient funds')) {
+                    showMessage('可用資金不足以支付交易費。', 'text-red-600');
+                } else {
+                    showMessage(`質押交易時發生錯誤: ${error.message}`, 'text-red-600');
+                }
+            } finally {
+                toggleActionButtons(true); // 重新啟用按鈕
+                stakeButton.textContent = '質押 SOL';
+            }
+        });
+
+        // 點擊「提領已質押 SOL」按鈕 (觸發真實 Phantom 交易，但提領邏輯仍為本機模擬)
+        unstakeButton.addEventListener('click', async () => {
+            if (!walletPublicKey) {
+                showMessage('請先連接錢包。', 'text-red-600');
+                return;
+            }
+
+            const unstakeAmount = parseFloat(unstakeAmountInput.value);
+
+            if (isNaN(unstakeAmount) || unstakeAmount <= 0) {
+                showMessage('請輸入有效的提領金額。', 'text-red-600');
+                return;
+            }
+            if (unstakeAmount > currentStakedSolBalance) {
+                showMessage('已質押餘額不足以提領。', 'text-red-600');
+                return;
+            }
+
+            // 為了模擬鏈上互動，這裡發送一個極小金額（1 Lamport）的轉帳給自己。
+            // 在真實的提領場景中，這裡會是呼叫一個質押智能合約的指令。
+            const dummyTransactionAmount = 1; // 1 Lamport = 0.000000001 SOL
+            try {
+                const transaction = new Transaction().add(
+                    SystemProgram.transfer({
+                        fromPubkey: walletPublicKey,
+                        toPubkey: walletPublicKey, // 轉帳給自己，僅用於觸發鏈上簽名
+                        lamports: dummyTransactionAmount,
+                    })
+                );
+
+                transaction.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+                transaction.feePayer = walletPublicKey;
+
+                toggleActionButtons(false); // 禁用按鈕
+                unstakeButton.textContent = '提領中 (等待批准)...';
+                showMessage('正在等待 Phantom 批准提領交易...', 'text-gray-600');
+
+                const signedTransaction = await provider.signTransaction(transaction);
+                const signature = await connection.sendRawTransaction(signedTransaction.serialize());
+
+                showMessage(`提領交易已發送！簽名: ${signature}. 等待確認...`, 'text-blue-600');
+
+                await connection.confirmTransaction(signature);
+
+                // 如果交易成功，則更新本機模擬的質押餘額
+                currentStakedSolBalance -= unstakeAmount; // 從已質押餘額中扣除
+                currentAvailableSolBalance += unstakeAmount; // 增加回可用餘額 (這是模擬，實際 SOL 未實際進入錢包)
+
+                updateAvailableBalanceDisplay(); // 更新可用餘額顯示
+                updateStakedBalanceDisplay(); // 更新已質押餘額顯示
+
+                showMessage(`成功提領 ${unstakeAmount.toFixed(4)} SOL！(鏈上交易已確認)`, 'text-green-600');
+                unstakeAmountInput.value = '';
+
+            } catch (error) {
+                console.error('提領交易失敗:', error);
+                if (error.code === 4001) {
+                    showMessage('用戶拒絕提領交易。', 'text-red-600');
+                } else if (error.message.includes('insufficient funds')) {
+                    showMessage('可用資金不足以支付交易費。', 'text-red-600');
+                } else {
+                    showMessage(`提領交易時發生錯誤: ${error.message}`, 'text-red-600');
+                }
+            } finally {
+                toggleActionButtons(true); // 重新啟用按鈕
+                unstakeButton.textContent = '提領已質押 SOL';
+            }
+        });
+
+        // 應用程式載入完成時，檢查 Phantom 是否存在並設定初始狀態
+        document.addEventListener('DOMContentLoaded', () => {
+            if (getProvider()) {
+                walletStatusElement.textContent = 'Phantom 錢包已安裝。請點擊上方按鈕連接。';
+                walletStatusElement.className = 'mt-3 text-sm text-green-600';
+            } else {
+                walletStatusElement.textContent = '請安裝 Phantom 錢包。';
+                walletStatusElement.className = 'mt-3 text-sm text-red-600';
+                connectWalletButton.disabled = true; // 如果沒有 Phantom，禁用連接按鈕
+            }
+            updateStakedBalanceDisplay(); // 初始化模擬的已質押餘額顯示
+        });
+    </script>
+</body>
+</html>
